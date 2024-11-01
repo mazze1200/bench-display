@@ -41,6 +41,7 @@ embedded-svc = "=0.28.0"
 toml-cfg = "=0.2.0"
 embedded-graphics = "0.8.1"
 ssd1680 = "0.2.0"
+textwrap = "0.16"
 
 [build-dependencies]
 embuild = "0.32.0"

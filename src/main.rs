@@ -29,6 +29,8 @@ use ssd1680::{
     driver::Ssd1680,
     prelude::{Display, Display2in13, DisplayRotation},
 };
+use std::num::{NonZeroI32, NonZeroU32};
+use textwrap::Options;
 
 use log::{error, info};
 
@@ -53,22 +55,22 @@ fn main() -> Result<()> {
     let app_config = CONFIG;
 
     // Connect to the Wi-Fi network
-    let _wifi = match wifi(
-        app_config.wifi_ssid,
-        app_config.wifi_psk,
-        peripherals.modem,
-        sysloop,
-    ) {
-        Ok(inner) => inner,
-        Err(err) => {
-            error!(
-                "Could not connect to Wi-Fi network: {:?} | {:?}",
-                app_config.wifi_ssid, err
-            );
-            std::thread::sleep(std::time::Duration::from_secs(5));
-            reset::restart();
-        }
-    };
+    // let _wifi = match wifi(
+    //     app_config.wifi_ssid,
+    //     app_config.wifi_psk,
+    //     peripherals.modem,
+    //     sysloop,
+    // ) {
+    //     Ok(inner) => inner,
+    //     Err(err) => {
+    //         error!(
+    //             "Could not connect to Wi-Fi network: {:?} | {:?}",
+    //             app_config.wifi_ssid, err
+    //         );
+    //         std::thread::sleep(std::time::Duration::from_secs(5));
+    //         reset::restart();
+    //     }
+    // };
 
     let spi = peripherals.spi2;
 
@@ -106,16 +108,18 @@ fn main() -> Result<()> {
 
     display_bw.set_rotation(DisplayRotation::Rotate90);
 
-    let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::Off);
-    let _ = Text::with_text_style(
-        "Hello",
-        Point::new(0, 20),
-        style,
-        TextStyleBuilder::new().alignment(Alignment::Left).build(),
-    )
-    .draw(&mut display_bw);
+    text(&mut display_bw, "Bench10", 2, 20, 246, Alignment::Left);
 
-    // draw_rotation_and_rulers(&mut display_bw);
+    text(&mut display_bw, "Q356", 246, 20, 246, Alignment::Right);
+
+    text(
+        &mut display_bw,
+        "This is a very long long long long long long long long long long  text",
+        2,
+        45,
+        246,
+        Alignment::Left,
+    );
 
     display_bw.set_rotation(DisplayRotation::Rotate0);
 
@@ -125,24 +129,8 @@ fn main() -> Result<()> {
         .draw(&mut display_bw)
         .unwrap();
 
-    // Rectangle::new(Point::new(60, 60), Size::new(40, 40))
-    //     .into_styled(PrimitiveStyle::with_fill(Black))
-    //     .draw(&mut display_bw)
-    //     .unwrap();
-
     info!("Send bw frame to display");
     ssd1680.update_bw_frame(display_bw.buffer()).unwrap();
-
-    // // Draw red color
-    // let mut display_red = Display2in13::red();
-
-    // Circle::new(Point::new(80, 80), 40)
-    //     .into_styled(PrimitiveStyle::with_fill(Red))
-    //     .draw(&mut display_red)
-    //     .unwrap();
-
-    // // println!("Send red frame to display");
-    // ssd1680.update_red_frame(display_red.buffer()).unwrap();
 
     info!("Update display");
     ssd1680
@@ -157,44 +145,13 @@ fn main() -> Result<()> {
     }
 }
 
-fn draw_rotation_and_rulers(display: &mut Display2in13) {
-    display.set_rotation(DisplayRotation::Rotate0);
-    draw_text(display, "rotation 0", 50, 35, Alignment::Center);
-    draw_ruler(display);
+fn text(display: &mut Display2in13, text: &str, x: i32, y: i32, width: usize, align: Alignment) {
+    let wrapped_description = textwrap::wrap(text, width / 10);
+    let merged = wrapped_description.join("\n");
 
-    display.set_rotation(DisplayRotation::Rotate90);
-    draw_text(display, "rotation 90", 50, 35, Alignment::Center);
-    draw_ruler(display);
-
-    display.set_rotation(DisplayRotation::Rotate180);
-    draw_text(display, "rotation 180", 50, 35, Alignment::Center);
-    draw_ruler(display);
-
-    display.set_rotation(DisplayRotation::Rotate270);
-    draw_text(display, "rotation 270", 50, 35, Alignment::Center);
-    draw_ruler(display);
-}
-
-fn draw_ruler(display: &mut Display2in13) {
-    for col in 1..ssd1680::WIDTH {
-        if col % 25 == 0 {
-            Line::new(Point::new(col as i32, 0), Point::new(col as i32, 10))
-                .into_styled(PrimitiveStyle::with_stroke(Black, 1))
-                .draw(display)
-                .unwrap();
-        }
-
-        if col % 50 == 0 {
-            let label = col.to_string();
-            draw_text(display, &label, col as i32, 20, Alignment::Center);
-        }
-    }
-}
-
-fn draw_text(display: &mut Display2in13, text: &str, x: i32, y: i32, align: Alignment) {
-    let style = MonoTextStyle::new(&FONT_5X8, BinaryColor::Off);
+    let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::Off);
     let _ = Text::with_text_style(
-        text,
+        merged.as_str(),
         Point::new(x, y),
         style,
         TextStyleBuilder::new().alignment(align).build(),
