@@ -108,16 +108,15 @@ fn main() -> Result<()> {
 
     display_bw.set_rotation(DisplayRotation::Rotate90);
 
-    text(&mut display_bw, "Bench10", 2, 20, 246, Alignment::Left);
-
-    text(&mut display_bw, "Q356", 246, 20, 246, Alignment::Right);
-
+    text(&mut display_bw, "Bench10", 2, 20, 246, 1, Alignment::Left);
+    text(&mut display_bw, "Q356", 246, 20, 246, 1, Alignment::Right);
     text(
         &mut display_bw,
-        "This is a very long long long long long long long long long long  text",
+        "This is a very long long long long long long long long long long  text and even longer ",
         2,
         45,
         246,
+        3,
         Alignment::Left,
     );
 
@@ -145,9 +144,21 @@ fn main() -> Result<()> {
     }
 }
 
-fn text(display: &mut Display2in13, text: &str, x: i32, y: i32, width: usize, align: Alignment) {
+fn text(
+    display: &mut Display2in13,
+    text: &str,
+    x: i32,
+    y: i32,
+    width: usize,
+    max_lines: usize,
+    align: Alignment,
+) {
     let wrapped_description = textwrap::wrap(text, width / 10);
-    let merged = wrapped_description.join("\n");
+    let merged = wrapped_description
+        .into_iter()
+        .take(max_lines)
+        .collect::<Vec<std::borrow::Cow<str>>>()
+        .join("\n");
 
     let style = MonoTextStyle::new(&FONT_10X20, BinaryColor::Off);
     let _ = Text::with_text_style(
