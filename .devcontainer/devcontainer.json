@@ -1,5 +1,5 @@
 {
-  "name": "bench_display",
+  "name": "bench-display",
   // Select between image and build propieties to pull or build the image.
   // "image": "docker.io/espressif/idf-rust:esp32c3_latest",
   "build": {
@@ -13,8 +13,10 @@
   // https://github.com/serialport/serialport-rs/issues/153
   "runArgs": [
     "--mount",
-    "type=bind,source=/run/udev,target=/run/udev,readonly"
+    "type=bind,source=/run/udev,target=/run/udev,readonly",
+    "--privileged"
   ],
+  "remoteUser": "root",
   "customizations": {
     "vscode": {
       "settings": {
@@ -35,7 +37,7 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
-        "serayuzgur.crates",
+        "fill-labs.dependi",
         "mutantdino.resourcemonitor",
         "yzhang.markdown-all-in-one",
         "ms-vscode.cpptools",
@@ -48,6 +50,6 @@
     3333,
     8000
   ],
-  "workspaceMount": "source=${localWorkspaceFolder},target=/home/esp/bench_display,type=bind,consistency=cached",
-  "workspaceFolder": "/home/esp/bench_display"
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/esp/bench-display,type=bind,consistency=cached",
+  "workspaceFolder": "/home/esp/bench-display"
 }
