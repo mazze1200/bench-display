@@ -11,7 +11,7 @@ pub fn wifi(
     pass: &str,
     modem: impl peripheral::Peripheral<P = esp_idf_svc::hal::modem::Modem> + 'static,
     sysloop: EspSystemEventLoop,
-) -> Result<Box<EspWifi<'static>>> {
+) -> Result<(Box<EspWifi<'static>>, esp_idf_svc::ipv4::IpInfo)> {
     let mut auth_method = AuthMethod::WPA2Personal;
     if ssid.is_empty() {
         bail!("Missing WiFi name")
@@ -70,9 +70,9 @@ pub fn wifi(
 
     wifi.wait_netif_up()?;
 
-    let ip_info = wifi.wifi().sta_netif().get_ip_info()?;
+    let ip_info: esp_idf_svc::ipv4::IpInfo = wifi.wifi().sta_netif().get_ip_info()?;
 
     info!("Wifi DHCP info: {:?}", ip_info);
 
-    Ok(Box::new(esp_wifi))
+    Ok((Box::new(esp_wifi), ip_info))
 }
