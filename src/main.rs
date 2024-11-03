@@ -294,16 +294,6 @@ fn main() -> Result<()> {
     }
 }
 
-struct Bench {
-    name: String,
-    topic: String,
-}
-
-struct SW {
-    bench: String,
-    version: String,
-    description: String,
-}
 enum MQTTEvent {
     Connected,
     Received((String, String)),
