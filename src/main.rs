@@ -18,7 +18,7 @@ use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
         delay::Ets,
-        gpio::{AnyIOPin, InputMode, PinDriver},
+        gpio::{AnyIOPin, InputMode, OutputMode, Pin, PinDriver},
         prelude::Peripherals,
         reset,
         spi::{SpiDeviceDriver, SpiDriver, SpiDriverConfig},
@@ -57,69 +57,6 @@ pub struct Config {
     mqtt_pass: &'static str,
 }
 
-// type DisplayDriver<
-//     'a,
-//     RST: esp_idf_svc::hal::gpio::Pin,
-//     DC: esp_idf_svc::hal::gpio::Pin,
-//     BUSY: esp_idf_svc::hal::gpio::Pin,
-//     OUT: esp_idf_svc::hal::gpio::OutputMode,
-//     IN: esp_idf_svc::hal::gpio::InputMode,
-// > = Ssd1680<
-//     &'a mut SpiDeviceDriver<'a, SpiDriver<'a>>,
-//     PinDriver<'a, BUSY, IN>,
-//     PinDriver<'a, DC, OUT>,
-//     PinDriver<'a, RST, OUT>,
-// >;
-
-// struct BenchDisplay<
-//     'a,
-//     RST: esp_idf_svc::hal::gpio::Pin,
-//     DC: esp_idf_svc::hal::gpio::Pin,
-//     BUSY: esp_idf_svc::hal::gpio::Pin,
-//     OUT: esp_idf_svc::hal::gpio::OutputMode,
-//     IN: esp_idf_svc::hal::gpio::InputMode,
-// > {
-//     ssd1680: Ssd1680<
-//         &'a mut SpiDeviceDriver<'a, SpiDriver<'a>>,
-//         PinDriver<'a, BUSY, IN>,
-//         PinDriver<'a, DC, OUT>,
-//         PinDriver<'a, RST, OUT>,
-//     >,
-// }
-
-// impl<
-//         'a,
-//         RST: esp_idf_svc::hal::gpio::Pin,
-//         DC: esp_idf_svc::hal::gpio::Pin,
-//         BUSY: esp_idf_svc::hal::gpio::Pin,
-//         OUT: esp_idf_svc::hal::gpio::OutputMode,
-//         IN: esp_idf_svc::hal::gpio::InputMode,
-//     > BenchDisplay<'a, RST, DC, BUSY, OUT, IN>
-// {
-//     pub fn new(spi: esp_idf_hal::peripherals::Peripherals   )-> Self {
-
-//         BenchDisplay{
-//             ssd1680 =
-//         }
-
-// }
-
-// fn update_display<
-//     'a,
-//     RST: esp_idf_svc::hal::gpio::Pin,
-//     DC: esp_idf_svc::hal::gpio::Pin,
-//     BUSY: esp_idf_svc::hal::gpio::Pin,
-//     OUT: esp_idf_svc::hal::gpio::OutputMode,
-//     IN: esp_idf_svc::hal::gpio::InputMode,
-// >(
-//     ssd1680: &mut Ssd1680<
-//         &mut SpiDeviceDriver<'a, SpiDriver<'a>>,
-//         PinDriver<'a, BUSY, IN>,
-//         PinDriver<'a, DC, OUT>,
-//         PinDriver<'a, RST, OUT>,
-//     >,
-// ) {
-
 fn text(
     display: &mut Display2in13,
     text: &str,
@@ -146,22 +83,15 @@ fn text(
     .draw(display);
 }
 
-type DisplayDriver<'a, 'b, BUSY, DC, RST, IN, OUT> = Ssd1680<
+type DisplayDriver<'a, 'b, BUSY, IN, DC, OUT, RST> = Ssd1680<
     &'b mut SpiDeviceDriver<'a, SpiDriver<'a>>,
     PinDriver<'a, BUSY, IN>,
     PinDriver<'a, DC, OUT>,
     PinDriver<'a, RST, OUT>,
 >;
 
-fn update_display<
-    'a,
-    RST: esp_idf_svc::hal::gpio::Pin,
-    DC: esp_idf_svc::hal::gpio::Pin,
-    BUSY: esp_idf_svc::hal::gpio::Pin,
-    OUT: esp_idf_svc::hal::gpio::OutputMode,
-    IN: esp_idf_svc::hal::gpio::InputMode,
->(
-    ssd1680: &'a mut DisplayDriver<'_, 'a, BUSY, DC, RST, IN, OUT>,
+fn update_display<RST: Pin, DC: Pin, BUSY: Pin, OUT: OutputMode, IN: InputMode>(
+    ssd1680: &mut DisplayDriver<'_, '_, BUSY, IN, DC, OUT, RST>,
     bench: &str,
     sw: &str,
     description: &str,
