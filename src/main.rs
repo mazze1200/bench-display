@@ -83,19 +83,25 @@ fn text(
     .draw(display);
 }
 
-type DisplayDriver<'a, 'b, BUSY, IN, DC, OUT, RST> = Ssd1680<
+// type MyDisplay<'a> = Ssd1680<
+//     &'a mut SpiDeviceDriver<'a, SpiDriver<'a>>,
+//     PinDriver<'a, esp_idf_svc::hal::gpio::Gpio21, esp_idf_svc::hal::gpio::Input>,
+//     PinDriver<'a, esp_idf_svc::hal::gpio::Gpio10, esp_idf_svc::hal::gpio::Output>,
+//     PinDriver<'a, esp_idf_svc::hal::gpio::Gpio20, esp_idf_svc::hal::gpio::Output>,
+// >;
+
+type Busy = esp_idf_svc::hal::gpio::Gpio21;
+type Dc = esp_idf_svc::hal::gpio::Gpio10;
+type Rst = esp_idf_svc::hal::gpio::Gpio20;
+
+type DisplayDriver<'a, 'b> = Ssd1680<
     &'b mut SpiDeviceDriver<'a, SpiDriver<'a>>,
-    PinDriver<'a, BUSY, IN>,
-    PinDriver<'a, DC, OUT>,
-    PinDriver<'a, RST, OUT>,
+    PinDriver<'a, Busy, esp_idf_svc::hal::gpio::Input>,
+    PinDriver<'a, Dc, esp_idf_svc::hal::gpio::Output>,
+    PinDriver<'a, Rst, esp_idf_svc::hal::gpio::Output>,
 >;
 
-fn update_display<RST: Pin, DC: Pin, BUSY: Pin, OUT: OutputMode, IN: InputMode>(
-    ssd1680: &mut DisplayDriver<'_, '_, BUSY, IN, DC, OUT, RST>,
-    bench: &str,
-    sw: &str,
-    description: &str,
-) {
+fn update_display(ssd1680: &mut DisplayDriver<'_, '_>, bench: &str, sw: &str, description: &str) {
     // Clear frames on the display driver
     ssd1680.clear_red_frame().unwrap();
     ssd1680.clear_bw_frame().unwrap();
@@ -235,8 +241,8 @@ enum MQTTEvent {
     Received((String, String)),
 }
 
-fn run<RST: Pin, DC: Pin, BUSY: Pin, OUT: OutputMode, IN: InputMode>(
-    ssd1680: &mut DisplayDriver<'_, '_, BUSY, IN, DC, OUT, RST>,
+fn run(
+    ssd1680: &mut DisplayDriver<'_, '_>,
     client: &mut EspMqttClient<'_>,
     connection: &mut EspMqttConnection,
     mac_address: &str,
