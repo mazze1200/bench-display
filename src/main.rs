@@ -1,44 +1,33 @@
-use anyhow::{bail, Error, Result};
+use anyhow::Result;
 use bench_display::wifi;
 use core::str;
 use embedded_graphics::{
-    mono_font::{ascii::FONT_10X20, ascii::FONT_5X8, MonoTextStyle},
+    mono_font::{ascii::FONT_10X20, MonoTextStyle},
     pixelcolor::BinaryColor,
     prelude::*,
     primitives::PrimitiveStyle,
-    primitives::{Circle, Line, Rectangle},
+    primitives::Rectangle,
     text::{Alignment, Text, TextStyleBuilder},
-};
-use embedded_svc::{
-    http::{client::Client, Method},
-    io::Read,
-    wifi::Wifi,
 };
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::{
         delay::Ets,
-        gpio::{AnyIOPin, InputMode, OutputMode, Pin, PinDriver},
+        gpio::{AnyIOPin, PinDriver},
         prelude::Peripherals,
         reset,
         spi::{SpiDeviceDriver, SpiDriver, SpiDriverConfig},
     },
-    http::client::{Configuration, EspHttpConnection},
     ipv4::IpInfo,
     sys::EspError,
 };
-use ssd1680::color::{Black, Red};
+use ssd1680::color::Black;
 use ssd1680::{
     driver::Ssd1680,
     prelude::{Display, Display2in13, DisplayRotation},
 };
 use std::sync::mpsc::channel;
-use std::{
-    fmt::Debug,
-    num::{NonZeroI32, NonZeroU32},
-    time::Duration,
-};
-use textwrap::Options;
+use std::time::Duration;
 
 use esp_idf_svc::mqtt::client::*;
 use log::{error, info};
@@ -295,6 +284,7 @@ fn run(
                 let mut bench: Option<String> = None;
                 let mut description: Option<String> = None;
                 let mut description_topic: Option<String> = None;
+                let mut lead_software_topic: Option<String> = None;
                 let mut software: Option<String> = None;
                 let mut software_topic: Option<String> = None;
 
@@ -323,14 +313,19 @@ fn run(
                                         continue;
                                     }
                                 }
-                                if let Some(topic) = description_topic {
+                                if let Some(topic) = &description_topic {
                                     info!("Unsubscribing from {}", topic);
-                                    client.unsubscribe(&topic).unwrap();
+                                    client.unsubscribe(topic).unwrap();
                                 }
 
-                                if let Some(topic) = software_topic {
+                                if let Some(topic) = &software_topic {
                                     info!("Unsubscribing from {}", topic);
-                                    client.unsubscribe(&topic).unwrap();
+                                    client.unsubscribe(topic).unwrap();
+                                }
+
+                                if let Some(topic) = &lead_software_topic {
+                                    info!("Unsubscribing from {}", topic);
+                                    client.unsubscribe(topic).unwrap();
                                 }
 
                                 description = None;
@@ -343,12 +338,13 @@ fn run(
                                     .unwrap();
                                 description_topic = Some(new_description_topic);
 
-                                let new_software_topic = format!("diagnosis/{}/software", data);
-                                info!("Subscribing to {}", new_software_topic);
+                                let new_lead_software_topic =
+                                    format!("diagnosis/{}/software/lead", data);
+                                info!("Subscribing to {}", new_lead_software_topic);
                                 client
-                                    .subscribe(&new_software_topic, QoS::AtLeastOnce)
+                                    .subscribe(&new_lead_software_topic, QoS::AtLeastOnce)
                                     .unwrap();
-                                software_topic = Some(new_software_topic);
+                                lead_software_topic = Some(new_lead_software_topic);
 
                                 bench = Some(data);
                             } else {
@@ -365,6 +361,16 @@ fn run(
                                     info!("Updating desciprion: {}", data);
                                     description = Some(data.to_string());
                                     need_update = true;
+                                } else if option_topic == lead_software_topic {
+                                    if let Some(bench) = &bench {
+                                        let new_software_topic =
+                                            format!("diagnosis/{}/software/{}", bench, data);
+                                        info!("Subscribing to {}", new_software_topic);
+                                        client
+                                            .subscribe(&new_software_topic, QoS::AtLeastOnce)
+                                            .unwrap();
+                                        software_topic = Some(new_software_topic);
+                                    }
                                 } else if option_topic == software_topic {
                                     if let Some(sw) = &software {
                                         if sw == &data {
@@ -379,15 +385,15 @@ fn run(
                                 }
 
                                 if need_update {
-                                    if let (Some(bench), Some(decription), Some(software)) =
+                                    if let (Some(bench), Some(description), Some(software)) =
                                         (&bench, &description, &software)
                                     {
                                         info!(
                                             "Update Display: Bench={}, Software={}, Description={}",
-                                            bench, decription, software
+                                            bench, description, software
                                         );
 
-                                        update_display(ssd1680, bench, software, decription);
+                                        update_display(ssd1680, bench, software, description);
                                     }
                                 }
                             }
