@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Error, Result};
 use bench_display::wifi;
 use core::str;
 use embedded_graphics::{
@@ -32,6 +32,7 @@ use ssd1680::{
     driver::Ssd1680,
     prelude::{Display, Display2in13, DisplayRotation},
 };
+use std::sync::mpsc::channel;
 use std::{
     fmt::Debug,
     num::{NonZeroI32, NonZeroU32},
@@ -269,6 +270,8 @@ fn main() -> Result<()> {
         format!("mqtt://{}", app_config.mqtt_host)
     };
 
+    info!("Connecting to MQTT broker: {}", broker_url);
+
     let client_id = format!("display-{}", mac);
 
     let mqtt_config = MqttClientConfiguration {
@@ -279,14 +282,31 @@ fn main() -> Result<()> {
 
     let (mut mqtt_client, mut mqtt_connection) =
         EspMqttClient::new(&broker_url, &mqtt_config).unwrap();
-    run(&mut mqtt_client, &mut mqtt_connection, &mac, ip_info).unwrap();
-
-    // let (mut client, mut conn) = mqtt_create(&broker_url, &client_id).unwrap();
 
     loop {
+        let res = run(&mut mqtt_client, &mut mqtt_connection, &mac, ip_info);
+        if let Err(error) = res {
+            info!("Error: {}", error);
+        }
+
+        info!("Waiting");
         std::thread::sleep(std::time::Duration::from_secs(1));
-        info!("Hello, world!");
     }
+}
+
+struct Bench {
+    name: String,
+    topic: String,
+}
+
+struct SW {
+    bench: String,
+    version: String,
+    description: String,
+}
+enum MQTTEvent {
+    Connected,
+    Received((String, String)),
 }
 
 fn run(
@@ -296,57 +316,160 @@ fn run(
     ip_info: IpInfo,
 ) -> Result<(), EspError> {
     std::thread::scope(|s| {
-        info!("About to start the MQTT client");
+        let (sender, receiver) = channel::<MQTTEvent>();
 
-        let topic = format!("devices/serial/display/{}", mac_address);
-
-        // Need to immediately start pumping the connection for messages, or else subscribe() and publish() below will not work
-        // Note that when using the alternative constructor - `EspMqttClient::new_cb` - you don't need to
-        // spawn a new thread, as the messages will be pumped with a backpressure into the callback you provide.
-        // Yet, you still need to efficiently process each message in the callback without blocking for too long.
-        //
-        // Note also that if you go to http://tools.emqx.io/ and then connect and send a message to topic
-        // "esp-mqtt-demo", the client configured here should receive it.
         std::thread::Builder::new()
             .stack_size(6000)
             .spawn_scoped(s, move || {
                 info!("MQTT Listening for messages");
 
+                // for event in connection.next() {
                 while let Ok(event) = connection.next() {
-                    info!("[Queue] Event: {}", event.payload());
+                    let payload = event.payload();
+                    match payload {
+                        EventPayload::Connected(_) => {
+                            info!("Connected");
+                            sender.send(MQTTEvent::Connected).unwrap();
+                        }
+                        EventPayload::Received {
+                            id: _,
+                            topic,
+                            data,
+                            details: _,
+                        } => {
+                            if let Some(topic) = topic {
+                                let data = String::from_utf8_lossy(data).into_owned();
+                                info!("Received {} = {}", topic, data);
+                                sender
+                                    .send(MQTTEvent::Received((topic.to_string(), data)))
+                                    .unwrap();
+                            }
+                        }
+                        _ => {
+                            info!("Receving other event {:?}", payload);
+                        }
+                    };
                 }
 
                 info!("Connection closed");
             })
             .unwrap();
 
+        std::thread::Builder::new()
+            .stack_size(6000)
+            .spawn_scoped(s, move || {
+                let bench_topic = format!("display/serial/{}/bench", mac_address);
+                let mut bench: Option<String> = None;
+                let mut description: Option<String> = None;
+                let mut description_topic: Option<String> = None;
+                let mut software: Option<String> = None;
+                let mut software_topic: Option<String> = None;
+
+                for event in receiver {
+                    match event {
+                        MQTTEvent::Connected => {
+                            info!("Subscribing to {}", &bench_topic);
+                            client.subscribe(&bench_topic, QoS::AtLeastOnce).unwrap();
+
+                            let ip_topic = format!("display/serial/{}/ip", mac_address);
+                            info!("Publishing to {}", &ip_topic);
+                            client
+                                .publish(
+                                    &ip_topic,
+                                    QoS::AtLeastOnce,
+                                    true,
+                                    ip_info.ip.to_string().as_bytes(),
+                                )
+                                .unwrap();
+                        }
+                        MQTTEvent::Received((topic, data)) => {
+                            if topic == bench_topic {
+                                if let Some(bench) = &bench {
+                                    if bench == &data {
+                                        // No change, do nothing
+                                        continue;
+                                    }
+                                }
+                                if let Some(topic) = description_topic {
+                                    info!("Unsubscribing from {}", topic);
+                                    client.unsubscribe(&topic).unwrap();
+                                }
+
+                                if let Some(topic) = software_topic {
+                                    info!("Unsubscribing from {}", topic);
+                                    client.unsubscribe(&topic).unwrap();
+                                }
+
+                                description = None;
+                                software = None;
+
+                                let new_description_topic = format!("benches/{}/description", data);
+                                info!("Subscribing to {}", new_description_topic);
+                                client
+                                    .subscribe(&new_description_topic, QoS::AtLeastOnce)
+                                    .unwrap();
+                                description_topic = Some(new_description_topic);
+
+                                let new_software_topic = format!("diagnosis/{}/software", data);
+                                info!("Subscribing to {}", new_software_topic);
+                                client
+                                    .subscribe(&new_software_topic, QoS::AtLeastOnce)
+                                    .unwrap();
+                                software_topic = Some(new_software_topic);
+
+                                bench = Some(data);
+                            } else {
+                                let mut need_update = false;
+                                let option_topic = Some(topic);
+                                if option_topic == description_topic {
+                                    if let Some(desc) = &description {
+                                        if desc == &data {
+                                            // No change, do nothing
+                                            continue;
+                                        }
+                                    }
+
+                                    info!("Updating desciprion: {}", data);
+                                    description = Some(data.to_string());
+                                    need_update = true;
+                                } else if option_topic == software_topic {
+                                    if let Some(sw) = &software {
+                                        if sw == &data {
+                                            // No change, do nothing
+                                            continue;
+                                        }
+                                    }
+
+                                    info!("Updating software: {}", data);
+                                    software = Some(data.to_string());
+                                    need_update = true;
+                                }
+
+                                if need_update {
+                                    if let (Some(bench), Some(decription), Some(software)) =
+                                        (&bench, &description, &software)
+                                    {
+                                        info!(
+                                            "Update Display: Bench={}, Software={}, Description={}",
+                                            bench, decription, software
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+            .unwrap();
+
         loop {
-            if let Err(e) = client.subscribe(&topic, QoS::AtMostOnce) {
-                error!("Failed to subscribe to topic \"{topic}\": {e}, retrying...");
-
-                // Re-try in 0.5s
-                std::thread::sleep(Duration::from_millis(500));
-
-                continue;
-            }
-
-            info!("Subscribed to topic \"{topic}\"");
-
-            // Just to give a chance of our connection to get even the first published message
-            std::thread::sleep(Duration::from_millis(500));
-
-            let payload = "Hello from esp-mqtt-demo!";
-
-            loop {
-                client.enqueue(&topic, QoS::AtMostOnce, false, payload.as_bytes())?;
-
-                info!("Published \"{payload}\" to topic \"{topic}\"");
-
-                let sleep_secs = 2;
-
-                info!("Now sleeping for {sleep_secs}s...");
-                std::thread::sleep(Duration::from_secs(sleep_secs));
-            }
+            info!("Waiting");
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
-    })
+    });
+
+    loop {
+        info!("outer Waiting");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
 }
