@@ -184,12 +184,12 @@ fn main() -> Result<()> {
     // Initialise display controller
     let mut ssd1680 = Ssd1680::new(&mut spi, busy, dc, rst, &mut Ets).unwrap();
 
-    update_display(
-        &mut ssd1680,
-        "Bench10",
-        "Q352",
-        "This is a very long long long long long long long long long long  text and even longer",
-    );
+    // update_display(
+    //     &mut ssd1680,
+    //     "Bench10",
+    //     "Q352",
+    //     "This is a very long long long long long long long long long long  text and even longer",
+    // );
 
     let broker_url = if app_config.mqtt_user != "" {
         format!(
@@ -214,7 +214,13 @@ fn main() -> Result<()> {
         EspMqttClient::new(&broker_url, &mqtt_config).unwrap();
 
     loop {
-        let res = run(&mut mqtt_client, &mut mqtt_connection, &mac, ip_info);
+        let res = run(
+            &mut ssd1680,
+            &mut mqtt_client,
+            &mut mqtt_connection,
+            &mac,
+            ip_info,
+        );
         if let Err(error) = res {
             info!("Error: {}", error);
         }
@@ -229,7 +235,8 @@ enum MQTTEvent {
     Received((String, String)),
 }
 
-fn run(
+fn run<RST: Pin, DC: Pin, BUSY: Pin, OUT: OutputMode, IN: InputMode>(
+    ssd1680: &mut DisplayDriver<'_, '_, BUSY, IN, DC, OUT, RST>,
     client: &mut EspMqttClient<'_>,
     connection: &mut EspMqttConnection,
     mac_address: &str,
@@ -276,7 +283,7 @@ fn run(
             .unwrap();
 
         std::thread::Builder::new()
-            .stack_size(6000)
+            .stack_size(12000)
             .spawn_scoped(s, move || {
                 let bench_topic = format!("display/serial/{}/bench", mac_address);
                 let mut bench: Option<String> = None;
@@ -373,6 +380,8 @@ fn run(
                                             "Update Display: Bench={}, Software={}, Description={}",
                                             bench, decription, software
                                         );
+
+                                        update_display(ssd1680, bench, software, decription);
                                     }
                                 }
                             }
