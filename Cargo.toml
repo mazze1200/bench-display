@@ -46,3 +46,4 @@ hex = "0.4.3"
 [build-dependencies]
 embuild = "0.32.0"
 toml-cfg = "=0.2.0"
+cc = "=1.1.30" # Necessary until a new version of `esp-idf-sys` is released
